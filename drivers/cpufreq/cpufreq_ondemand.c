@@ -31,7 +31,7 @@
  * It helps to keep variable names smaller, simpler
  */
 
-#define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(20)
+#define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(10)
 #define DEF_FREQUENCY_UP_THRESHOLD		(80)
 #define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(3)
 #define MICRO_FREQUENCY_UP_THRESHOLD		(95)
@@ -589,30 +589,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-		/* If switching to max speed, apply sampling_down_factor */
-		if (policy->cur < policy->max)
-			this_dbs_info->rate_mult =
-				dbs_tuners_ins.sampling_down_factor;
->>>>>>> c88acdc... ADD: governors from Imoseyon user:
 		dbs_freq_increase(policy, policy->max);
-=======
-		/* if we are already at full speed then break out early */
-		if (!dbs_tuners_ins.powersave_bias) {
-			if (policy->cur == policy->max)
-				return;
-
-			__cpufreq_driver_target(policy, policy->max,
-				CPUFREQ_RELATION_H);
-		} else {
-			int freq = powersave_bias_target(policy, policy->max,
-					CPUFREQ_RELATION_H);
-			__cpufreq_driver_target(policy, freq,
-				CPUFREQ_RELATION_L);
-		}
->>>>>>> parent of c88acdc... ADD: governors from Imoseyon user:
 		return;
 	}
 
@@ -725,10 +702,6 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> parent of c88acdc... ADD: governors from Imoseyon user:
 static void dbs_refresh_callback(struct work_struct *unused)
 {
 	struct cpufreq_policy *policy;
@@ -741,11 +714,8 @@ static void dbs_refresh_callback(struct work_struct *unused)
 	policy = this_dbs_info->cur_policy;
 
 	if (policy->cur < policy->max) {
-<<<<<<< HEAD
 		policy->cur = policy->max;
 
-=======
->>>>>>> parent of c88acdc... ADD: governors from Imoseyon user:
 		__cpufreq_driver_target(policy, policy->max,
 					CPUFREQ_RELATION_L);
 		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(0,
@@ -829,11 +799,6 @@ static struct input_handler dbs_input_handler = {
 	.name		= "cpufreq_ond",
 	.id_table	= dbs_ids,
 };
-<<<<<<< HEAD
-=======
->>>>>>> c88acdc... ADD: governors from Imoseyon user:
-=======
->>>>>>> parent of c88acdc... ADD: governors from Imoseyon user:
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				   unsigned int event)
 {

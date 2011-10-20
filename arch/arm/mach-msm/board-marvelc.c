@@ -977,8 +977,6 @@ static void __init marvelc_init(void)
 
 	marvelc_init_keypad();
 
-	marvelc_wifi_init();
-
 	msm_init_pmic_vibrator(2800);
 }
 
