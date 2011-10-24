@@ -114,7 +114,7 @@
 #define MARVEL_GPIO_BT_RESET_N          (90)
 #define MARVEL_GPIO_BT_HOST_WAKE        (112)
 #define MARVEL_GPIO_BT_CHIP_WAKE        (122)
-#define MARVEL_GPIO_BT_SD_N             (123)
+#define MARVEL_GPIO_BT_SHUTDOWN_N       (123)
 
 /* Touch Panel */
 #define MARVEL_GPIO_TP_ATT_N            (18)

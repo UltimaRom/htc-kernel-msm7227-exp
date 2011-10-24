@@ -59,7 +59,7 @@ static uint32_t marvel_bt_init_table[] = {
 				GPIO_OUTPUT,
 				GPIO_NO_PULL,
 				GPIO_4MA),
-	PCOM_GPIO_CFG(MARVEL_GPIO_BT_SD_N, /* BT_SHUTDOWN_N */
+	PCOM_GPIO_CFG(MARVEL_GPIO_BT_SHUTDOWN_N, /* BT_SHUTDOWN_N */
 				0,
 				GPIO_OUTPUT,
 				GPIO_NO_PULL,
@@ -117,7 +117,7 @@ static uint32_t marvel_bt_on_table[] = {
 				GPIO_OUTPUT,
 				GPIO_NO_PULL,
 				GPIO_4MA),
-	PCOM_GPIO_CFG(MARVEL_GPIO_BT_SD_N, /* BT_SHUTDOWN_N */
+	PCOM_GPIO_CFG(MARVEL_GPIO_BT_SHUTDOWN_N, /* BT_SHUTDOWN_N */
 				0,
 				GPIO_OUTPUT,
 				GPIO_NO_PULL,
@@ -153,7 +153,7 @@ static uint32_t marvel_bt_off_table[] = {
 				GPIO_OUTPUT,
 				GPIO_NO_PULL,
 				GPIO_4MA),
-	PCOM_GPIO_CFG(MARVEL_GPIO_BT_SD_N, /* BT_SHUTDOWN_N */
+	PCOM_GPIO_CFG(MARVEL_GPIO_BT_SHUTDOWN_N, /* BT_SHUTDOWN_N */
 				0,
 				GPIO_OUTPUT,
 				GPIO_NO_PULL,
@@ -207,7 +207,7 @@ static void marvel_config_bt_init(void)
 				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 	mdelay(2);
 	/* BT_SHUTDOWN_N */
-	gpio_configure(MARVEL_GPIO_BT_SD_N,
+	gpio_configure(MARVEL_GPIO_BT_SHUTDOWN_N,
 				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 	mdelay(2);
 
@@ -229,7 +229,7 @@ static void marvel_config_bt_on(void)
 				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
 	mdelay(2);
 	/* BT_SHUTDOWN_N */
-	gpio_configure(MARVEL_GPIO_BT_SD_N,
+	gpio_configure(MARVEL_GPIO_BT_SHUTDOWN_N,
 				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
 	mdelay(2);
 }
@@ -237,7 +237,7 @@ static void marvel_config_bt_on(void)
 static void marvel_config_bt_off(void)
 {
 	/* BT_SHUTDOWN_N */
-	gpio_configure(MARVEL_GPIO_BT_SD_N,
+	gpio_configure(MARVEL_GPIO_BT_SHUTDOWN_N,
 				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 	mdelay(2);
 	/* BT_RESET_N */
