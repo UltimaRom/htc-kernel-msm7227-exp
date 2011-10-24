@@ -26,9 +26,10 @@
 #include <linux/himax8250.h>
 #include <linux/akm8975.h>
 #include <linux/bma150.h>
-#include <linux/cm3628.h>
+#include <linux/capella_cm3602.h>
 #include <linux/sysdev.h>
 #include <linux/android_pmem.h>
+#include <linux/curcial_oj.h>
 #include <linux/mmc/sdio_ids.h>
 #include <linux/gpio_event.h>
 #include <linux/mtd/nand.h>
@@ -88,6 +89,7 @@ void msm_init_gpio(void);
 void config_marvel_camera_on_gpios(void);
 void config_marvel_camera_off_gpios(void);
 
+void config_marvel_proximity_gpios(int on);
 
 #ifdef CONFIG_MICROP_COMMON
 void __init marvel_microp_init(void);
@@ -187,6 +189,7 @@ static struct platform_device htc_battery_pdev = {
 	},
 };
 
+static int capella_cm3602_power(int pwr_device, uint8_t enable);
 
 static struct microp_function_config microp_functions[] = {
 	{
@@ -198,6 +201,26 @@ static struct microp_function_config microp_functions[] = {
 		.category = MICROP_FUNCTION_RESET_INT,
 		.int_pin = 1 << 8,
 	},
+	{
+		.name   = "oj",
+		.category = MICROP_FUNCTION_OJ,
+		.int_pin = 1 << 12,
+	},
+};
+
+static struct microp_function_config microp_lightsensor = {
+	.name = "light_sensor",
+	.category = MICROP_FUNCTION_LSENSOR,
+	.levels = { 0, 0x21, 0x4D, 0xDC, 0x134, 0x18D, 0x1E5, 0x3FF, 0x3FF, 0x3FF },
+	.channel = 3,
+	.int_pin = 1 << 9,
+	.golden_adc = 0xC0,
+	.ls_power = capella_cm3602_power,
+};
+
+static struct lightsensor_platform_data lightsensor_data = {
+	.config = &microp_lightsensor,
+	.irq = MSM_uP_TO_INT(9),
 };
 
 static struct microp_led_config led_config[] = {
@@ -230,6 +253,12 @@ static struct bma150_platform_data marvel_g_sensor_pdata = {
 };
 
 static struct platform_device microp_devices[] = {
+	{
+		.name = "lightsensor_microp",
+		.dev		= {
+			.platform_data	= &lightsensor_data,
+		},
+	},
 	{
 		.name		= "leds-microp",
 		.id		= -1,
@@ -503,78 +532,7 @@ static struct akm8975_platform_data compass_platform_data = {
 	.layouts = MARVEL_LAYOUTS,
 };
 
-static int __capella_cm3628_power(int on)
-{
-	int rc;
-	struct vreg *vreg = vreg_get(0, "wlan");
 
-	if (!vreg) {
-		printk(KERN_ERR "%s: vreg error\n", __func__);
-		return -EIO;
-	}
-	rc = vreg_set_level(vreg, 2800);
-
-	printk(KERN_DEBUG "%s: Turn the capella_cm3628 power %s\n",
-		__func__, (on) ? "on" : "off");
-
-	if (on) {
-		rc = vreg_enable(vreg);
-		if (rc < 0)
-			printk(KERN_ERR "%s: vreg enable failed\n", __func__);
-	} else {
-		rc = vreg_disable(vreg);
-		if (rc < 0)
-			printk(KERN_ERR "%s: vreg disable failed\n", __func__);
-	}
-
-	return rc;
-}
-
-static DEFINE_MUTEX(capella_cm3628_lock);
-static int als_power_control;
-
-static int capella_cm3628_power(int pwr_device, uint8_t enable)
-{
-	unsigned int old_status = 0;
-	int ret = 0, on = 0;
-	mutex_lock(&capella_cm3628_lock);
-
-	old_status = als_power_control;
-	if (enable)
-		als_power_control |= pwr_device;
-	else
-		als_power_control &= ~pwr_device;
-
-	on = als_power_control ? 1 : 0;
-	if (old_status == 0 && on)
-		ret = __capella_cm3628_power(1);
-	else if (!on)
-		ret = __capella_cm3628_power(0);
-
-	mutex_unlock(&capella_cm3628_lock);
-	return ret;
-}
-
-static struct cm3628_platform_data cm3628_pdata = {
-	.intr = MARVEL_GPIO_PROXIMITY_INT,
-	.levels = { 0x1, 0x3, 0x5, 0x2A, 0x52, 0x43D,
-			0x751, 0x94A, 0xB43, 0xFFFF},
-	.golden_adc = 0x554,
-	.power = capella_cm3628_power,
-	.ALS_slave_address = 0xC0>>1,
-	.PS_slave_address = 0xC2>>1,
-	.check_interrupt_add = 0x2C>>1	,
-	.is_cmd = CM3628_ALS_IT_400ms | CM3628_ALS_PERS_2,
-	.ps_thd_set = 0x3,
-	.ps_conf2_val = 0,
-	.ps_conf1_val = CM3628_PS_DR_1_320 |CM3628_PS_IT_1T,
-	.ps_calibration_rule = 1,/*sync saga calibration rule*/
-	.ps_thd_no_cal = 0x15,
-	.ps_thd_with_cal = 0x3,
-	.ps_adc_offset = 0x3,
-	.ps_debounce = 1,
-	.ps_delay_time = 500,
-};
 
 static struct tps65200_platform_data tps65200_data = {
 	.charger_check = 0,
@@ -600,11 +558,7 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("tps65200", 0xD4 >> 1),
 		.platform_data = &tps65200_data,
 	},
-	{
-		I2C_BOARD_INFO(CM3628_I2C_NAME, 0xC0 >> 1),
-		.platform_data = &cm3628_pdata,
-		.irq = MSM_GPIO_TO_INT(MARVEL_GPIO_PROXIMITY_INT),
-	},
+	
 	{
 		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x1A >> 1),
 		.platform_data = &compass_platform_data,
@@ -714,32 +668,6 @@ static struct msm_pmem_setting pmem_setting = {
 
 
 #ifdef CONFIG_MSM_CAMERA
-
-static int camera_power_on_init(void)
-{
-	int rc=0;
-
-//	printk(KERN_INFO "%s():\n", __func__);
-
-	gpio_request(MARVEL_GPIO_VCM_PD, "cam_pwr_on");
-	gpio_direction_output(MARVEL_GPIO_VCM_PD, 0);
-	gpio_free(MARVEL_GPIO_VCM_PD);
-
-	return rc;
-}
-
-static int flashlight_control(int mode)
-{
-	return aat3177_flashlight_control(mode);
-}
-
-static struct camera_flash_cfg msm_camera_sensor_flash_cfg = {
-	.camera_flash		= flashlight_control,
-	.num_flash_levels	= FLASHLIGHT_NUM,
-	.low_temp_limit		= 5,
-	.low_cap_limit		= 15,
-};
-
 static struct resource msm_camera_resources[] = {
 	{
 		.start	= MSM_VFE_PHYS,
@@ -766,10 +694,8 @@ static struct msm_camera_sensor_info msm_camera_sensor_s5k4e1gx_data = {
 	.sensor_name    = "s5k4e1gx",
 	.sensor_reset   = MARVEL_GPIO_CAM_RST_N,
 	.vcm_pwd        = MARVEL_GPIO_VCM_PD,
-	.camera_power_on = camera_power_on_init,
 	.pdata          = &msm_camera_device_data,
 	.flash_type     = MSM_CAMERA_FLASH_LED,
-	.flash_cfg	= &msm_camera_sensor_flash_cfg,
 	.resource       = msm_camera_resources,
 	.num_resources  = ARRAY_SIZE(msm_camera_resources)
 };
@@ -785,6 +711,161 @@ static struct platform_device msm_camera_sensor_s5k4e1gx = {
 static struct platform_device marvel_rfkill = {
 	.name = "marvel_rfkill",
 	.id = -1,
+};
+
+/* Proximity Sensor (Capella_CM3602)*/
+static int __capella_cm3602_power(int on)
+{
+	int rc;
+	struct vreg *vreg = vreg_get(0, "wlan");
+	if (!vreg) {
+		printk(KERN_ERR "%s: vreg error\n", __func__);
+		return -EIO;
+	}
+	rc = vreg_set_level(vreg, 2800);
+
+	printk(KERN_DEBUG "%s: Turn the capella_cm3602 power %s\n",
+		__func__, (on) ? "on" : "off");
+	if (on) {
+		config_marvel_proximity_gpios(1);
+		gpio_direction_output(MARVEL_GPIO_PROXIMITY_EN, 1);
+		rc = vreg_enable(vreg);
+		if (rc < 0)
+			printk(KERN_ERR "%s: vreg enable failed\n", __func__);
+	} else {
+		rc = vreg_disable(vreg);
+		if (rc < 0)
+			printk(KERN_ERR "%s: vreg disable failed\n", __func__);
+		gpio_direction_output(MARVEL_GPIO_PROXIMITY_EN, 0);
+		config_marvel_proximity_gpios(0);
+	}
+
+	return rc;
+}
+
+static DEFINE_MUTEX(capella_cm3602_lock);
+static unsigned int als_power_control;
+
+static int capella_cm3602_power(int pwr_device, uint8_t enable)
+{
+	unsigned int old_status = 0;
+	int ret = 0, on = 0;
+	mutex_lock(&capella_cm3602_lock);
+
+	old_status = als_power_control;
+	if (enable)
+		als_power_control |= pwr_device;
+	else
+		als_power_control &= ~pwr_device;
+
+	on = als_power_control ? 1 : 0;
+	if (old_status == 0 && on)
+		ret = __capella_cm3602_power(1);
+	else if (!on)
+		ret = __capella_cm3602_power(0);
+
+	mutex_unlock(&capella_cm3602_lock);
+	return ret;
+}
+
+static struct capella_cm3602_platform_data capella_cm3602_pdata = {
+	.p_out = MARVEL_GPIO_PROXIMITY_INT,
+	.p_en = MARVEL_GPIO_PROXIMITY_EN,
+	.power = capella_cm3602_power,
+	.irq = MSM_GPIO_TO_INT(MARVEL_GPIO_PROXIMITY_INT),
+};
+
+static struct platform_device capella_cm3602 = {
+	.name = CAPELLA_CM3602,
+	.dev = {
+		.platform_data = &capella_cm3602_pdata
+	}
+};
+/* End Proximity Sensor (Capella_CM3602)*/
+
+static void curcial_oj_shutdown (int	enable)
+{
+	uint8_t cmd[3];
+	memset(cmd, 0, sizeof(uint8_t)*3);
+
+	cmd[2] = 0x80;
+	if (enable)
+		microp_i2c_write(0x91, cmd, 3);
+	else
+		microp_i2c_write(0x90, cmd, 3);
+}
+static int curcial_oj_poweron(int on)
+{
+	struct vreg	*oj_power = vreg_get(0, "rftx");
+	if (IS_ERR(oj_power)) {
+		printk(KERN_ERR"%s:Error power domain\n",__func__);
+		return 0;
+	}
+
+	if (on) {
+		vreg_set_level(oj_power, 2850);
+		vreg_enable(oj_power);
+		printk(KERN_ERR "%s:OJ	power	enable(%d)\n", __func__, on);
+	} else {
+		vreg_disable(oj_power);
+		printk(KERN_ERR "%s:OJ	power	enable(%d)\n", __func__, on);
+		}
+	return 1;
+}
+#define LIB_MICROP_VER	0x02
+static void curcial_oj_adjust_xy(uint8_t *data, int16_t *mSumDeltaX, int16_t *mSumDeltaY)
+{
+	int8_t 	deltaX;
+	int8_t 	deltaY;
+
+
+	if (data[2] == 0x80)
+		data[2] = 0x81;
+	if (data[1] == 0x80)
+		data[1] = 0x81;
+	if (0) {
+		deltaX = (1)*((int8_t) data[2]); /*X=2*/
+		deltaY = (1)*((int8_t) data[1]); /*Y=1*/
+	} else {
+		deltaX = (1)*((int8_t) data[1]);
+		deltaY = (1)*((int8_t) data[2]);
+	}
+	*mSumDeltaX += -((int16_t)deltaX);
+	*mSumDeltaY += -((int16_t)deltaY);
+}
+static struct curcial_oj_platform_data marvel_oj_data = {
+	.oj_poweron = curcial_oj_poweron,
+	.oj_shutdown = curcial_oj_shutdown,
+	.oj_adjust_xy = curcial_oj_adjust_xy,
+	.microp_version = LIB_MICROP_VER,
+	.mdelay_time = 0,
+	.normal_th = 8,
+	.xy_ratio = 15,
+	.interval = 20,
+	.swap = true,
+	.x = 1,
+	.y = 1,
+	.share_power = false,
+	.debugflag = 0,
+	.ap_code = true,
+	.sht_tbl = {0, 2000, 2250, 2500, 2750, 3000},
+	.pxsum_tbl = {0, 0, 40, 50, 60, 70},
+	.degree = 6,
+	.Xsteps = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		10, 10, 10, 10, 10, 9, 9, 9, 9, 9,
+		9, 9, 9, 9, 9, 9, 9, 9, 9, 9},
+	.Ysteps = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		10, 10, 10, 10, 10, 9, 9, 9, 9, 9,
+		9, 9, 9, 9, 9, 9, 9, 9, 9, 9},
+	.irq = MSM_uP_TO_INT(12),
+};
+
+static struct platform_device marvel_oj = {
+	.name = CURCIAL_OJ_NAME,
+	.id = -1,
+	.dev = {
+		.platform_data	= &marvel_oj_data,
+	}
 };
 
 static struct msm_i2c_device_platform_data msm_i2c_pdata = {
@@ -895,6 +976,8 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_HTC_PWRSINK
 	&marvel_pwr_sink,
 #endif
+	&marvel_oj,
+	&capella_cm3602,
 	&marvel_flashlight_device,
 };
 
@@ -930,6 +1013,16 @@ static void marvel_reset(void)
 {
 	gpio_set_value(MARVEL_GPIO_MSM_PS_HOLD, 0);
 }
+
+static uint32_t proximity_on_gpio_table[] = {
+	PCOM_GPIO_CFG(MARVEL_GPIO_PROXIMITY_INT,
+		0, GPIO_INPUT, GPIO_NO_PULL, 0), /* PS_VOUT */
+};
+
+static uint32_t proximity_off_gpio_table[] = {
+	PCOM_GPIO_CFG(MARVEL_GPIO_PROXIMITY_INT,
+		0, GPIO_INPUT, GPIO_PULL_DOWN, 0) /* PS_VOUT */
+};
 
 static struct i2c_board_info i2c_camera_devices[] = {
 	{
@@ -990,6 +1083,17 @@ void config_marvel_camera_off_gpios(void)
 	config_gpio_table(camera_off_gpio_table,
 		ARRAY_SIZE(camera_off_gpio_table));
 }
+
+void config_marvel_proximity_gpios(int on)
+{
+	if (on)
+		config_gpio_table(proximity_on_gpio_table,
+			ARRAY_SIZE(proximity_on_gpio_table));
+	else
+		config_gpio_table(proximity_off_gpio_table,
+			ARRAY_SIZE(proximity_off_gpio_table));
+}
+
 #ifndef CONFIG_SERIAL_MSM_HS_PURE_ANDROID
 /* for bcm */
 static char bdaddress[20];
