@@ -57,6 +57,10 @@
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/msm_serial_hs.h>
+#ifdef CONFIG_SERIAL_MSM_HS_PURE_ANDROID
+#include <mach/bcm_bt_lpm.h>
+#endif
+
 #include <mach/atmega_microp.h>
 #include <mach/htc_battery.h>
 #include <linux/tps65200.h>
@@ -458,6 +462,22 @@ static struct platform_device usb_mass_storage_device = {
 	},
 };
 
+#ifdef CONFIG_USB_ANDROID_RNDIS
+static struct usb_ether_platform_data rndis_pdata = {
+	/* ethaddr is filled by board_serialno_setup */
+	.vendorID	= 0x18d1,
+	.vendorDescr	= "Google, Inc.",
+};
+
+static struct platform_device rndis_device = {
+	.name	= "rndis",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &rndis_pdata,
+	},
+};
+#endif
+
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id	= 0x0bb4,
 	.product_id	= 0x0cb0,
@@ -807,8 +827,68 @@ static struct platform_device marvel_flashlight_device = {
 	},
 };
 
+#if defined(CONFIG_SERIAL_MSM_HS) && defined(CONFIG_SERIAL_MSM_HS_PURE_ANDROID)
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+        .rx_wakeup_irq = -1,
+        .inject_rx_on_wakeup = 0,
+        .exit_lpm_cb = bcm_bt_lpm_exit_lpm_locked,
+};
+
+static struct bcm_bt_lpm_platform_data bcm_bt_lpm_pdata = {
+        .gpio_wake = MARVEL_GPIO_BT_CHIP_WAKE,
+        .gpio_host_wake = MARVEL_GPIO_BT_HOST_WAKE,
+        .request_clock_off_locked = msm_hs_request_clock_off_locked,
+        .request_clock_on_locked = msm_hs_request_clock_on_locked,
+};
+
+struct platform_device bcm_bt_lpm_device = {
+        .name = "bcm_bt_lpm",
+        .id = 0,
+        .dev = {
+                .platform_data = &bcm_bt_lpm_pdata,
+        },
+};
+
+#define ATAG_BDADDR 0x43294329  /* mahimahi bluetooth address tag */
+#define ATAG_BDADDR_SIZE 4
+#define BDADDR_STR_SIZE 18
+
+static char bdaddr[BDADDR_STR_SIZE];
+extern unsigned char *get_bt_bd_ram(void);
+
+static void bt_export_bd_address(void)
+{
+
+  unsigned char cTemp[6];
+
+  memcpy(cTemp, get_bt_bd_ram(), 6);
+  sprintf(bdaddr, "%02x:%02x:%02x:%02x:%02x:%02x",
+    cTemp[0], cTemp[1], cTemp[2], cTemp[3], cTemp[4], cTemp[5]);
+  printk(KERN_INFO "BT HW address=%s\n", bdaddr);
+}
+
+module_param_string(bdaddr, bdaddr, sizeof(bdaddr), S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(bdaddr, "bluetooth address");
+
+#elif defined(CONFIG_SERIAL_MSM_HS)
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+	.wakeup_irq = MSM_GPIO_TO_INT(MARVEL_GPIO_BT_HOST_WAKE),
+	.inject_rx_on_wakeup = 0,
+	.cpu_lock_supported = 1,
+
+	/* for bcm */
+	.bt_wakeup_pin_supported = 1,
+	.bt_wakeup_pin = MARVEL_GPIO_BT_CHIP_WAKE,
+	.host_wakeup_pin = MARVEL_GPIO_BT_HOST_WAKE,
+
+};
+#endif
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_i2c,
+#ifdef CONFIG_SERIAL_MSM_HS_PURE_ANDROID
+        &bcm_bt_lpm_device,
+#endif
 	&htc_battery_pdev,
 	&msm_camera_sensor_s5k4e1gx,
 	&marvel_rfkill,
@@ -910,7 +990,7 @@ void config_marvel_camera_off_gpios(void)
 	config_gpio_table(camera_off_gpio_table,
 		ARRAY_SIZE(camera_off_gpio_table));
 }
-
+#ifndef CONFIG_SERIAL_MSM_HS_PURE_ANDROID
 /* for bcm */
 static char bdaddress[20];
 extern unsigned char *get_bt_bd_ram(void);
@@ -927,6 +1007,7 @@ static void bt_export_bd_address(void)
 
 module_param_string(bdaddress, bdaddress, sizeof(bdaddress), S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(bdaddress, "BT MAC ADDRESS");
+#endif
 
 static uint32_t marvel_serial_debug_table[] = {
 	/* config as serial debug uart */
@@ -966,20 +1047,6 @@ static struct perflock_platform_data marvel_perflock_data = {
 	.perf_acpu_table = marvel_perf_acpu_table,
 	.table_size = ARRAY_SIZE(marvel_perf_acpu_table),
 };
-
-#ifdef CONFIG_SERIAL_MSM_HS
-static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
-	.rx_wakeup_irq = MSM_GPIO_TO_INT(MARVEL_GPIO_BT_HOST_WAKE),
-	.inject_rx_on_wakeup = 0,
-	.cpu_lock_supported = 1,
-
-	/* for bcm */
-	.bt_wakeup_pin_supported = 1,
-	.bt_wakeup_pin = MARVEL_GPIO_BT_CHIP_WAKE,
-	.host_wakeup_pin = MARVEL_GPIO_BT_HOST_WAKE,
-
-};
-#endif
 
 static ssize_t marvel_virtual_keys_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
@@ -1060,7 +1127,9 @@ static void __init marvel_init(void)
 
 #ifdef CONFIG_SERIAL_MSM_HS
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
+#ifndef CONFIG_SERIAL_MSM_HS_PURE_ANDROID
 	msm_device_uart_dm1.name = "msm_serial_hs_bcm";	/* for bcm */
+#endif
 	msm_add_serial_devices(3);
 #else
 	msm_add_serial_devices(0);
@@ -1083,6 +1152,9 @@ static void __init marvel_init(void)
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	config_marvel_usb_id_gpios(0);
 	platform_device_register(&msm_device_hsusb);
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	platform_device_register(&rndis_device);
+#endif
 	platform_device_register(&usb_mass_storage_device);
 	platform_device_register(&android_usb_device);
 #endif
