@@ -187,6 +187,7 @@ static struct platform_device htc_battery_pdev = {
 	},
 };
 
+static int capella_cm3628_power(int pwr_device, uint8_t enable);
 
 static struct microp_function_config microp_functions[] = {
 	{
@@ -198,6 +199,22 @@ static struct microp_function_config microp_functions[] = {
 		.category = MICROP_FUNCTION_RESET_INT,
 		.int_pin = 1 << 8,
 	},
+	
+};
+
+static struct microp_function_config microp_lightsensor = {
+	.name = "light_sensor",
+	.category = MICROP_FUNCTION_LSENSOR,
+	.levels = { 0, 0x21, 0x4D, 0xDC, 0x134, 0x18D, 0x1E5, 0x3FF, 0x3FF, 0x3FF },
+	.channel = 3,
+	.int_pin = 1 << 9,
+	.golden_adc = 0xC0,
+	.ls_power = capella_cm3628_power,
+};
+
+static struct lightsensor_platform_data lightsensor_data = {
+	.config = &microp_lightsensor,
+	.irq = MSM_uP_TO_INT(9),
 };
 
 static struct microp_led_config led_config[] = {
@@ -230,6 +247,12 @@ static struct bma150_platform_data marvel_g_sensor_pdata = {
 };
 
 static struct platform_device microp_devices[] = {
+	{
+		.name = "lightsensor_microp",
+		.dev		= {
+			.platform_data	= &lightsensor_data,
+		},
+	},
 	{
 		.name		= "leds-microp",
 		.id		= -1,
